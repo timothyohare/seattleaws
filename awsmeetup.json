@@ -1,0 +1,239 @@
+{
+   "AWSTemplateFormatVersion" : "2010-09-09",
+   "Description" : "Seattle AWS Architects & Engineers - AWS Study Group Stack",
+   "Parameters" : {
+	 "ParamKeyName": {
+   		 "Description": "Instance key name",
+  		  "Type": "String"
+ 		 },
+	 "ParamAvailabilityZone1": {
+   		 "Description": "Instance key name",
+  		  "Type": "String",
+		  "Default": "us-west-2a"
+ 		 },
+	 "ParamAvailabilityZone2": {
+   		 "Description": "Instance key name",
+  		  "Type": "String",
+                  "Default": "us-west-2b"
+ 		 },
+	 "ParamSshCidr": {
+   		 "Description": "SSH In CIDR",
+  		  "Type": "String",
+                  "Default": "70.199.140.28/32"
+ 		 }
+
+
+    },
+   "Resources" : {
+
+      "AwsMeetupVpc" : {
+         "Type" : "AWS::EC2::VPC",
+         "Properties" : {
+            "CidrBlock" : "10.0.0.0/16",
+            "EnableDnsSupport" : "true",
+            "EnableDnsHostnames" : "true",
+            "InstanceTenancy" : "default",
+            "Tags" : [ {"Key" : "Name", "Value" : "aws meetup vpc"} ]
+         }
+      },
+      "SubnetPrivate1" : {
+         "Type" : "AWS::EC2::Subnet",
+         "Properties" : {
+            "VpcId" : { "Ref" : "AwsMeetupVpc" },
+            "CidrBlock" : "10.0.1.0/24",
+            "AvailabilityZone" : {"Ref" : "ParamAvailabilityZone1"},
+            "Tags" : [ { "Key" : "Name", "Value" : "aws meetup private subnet 1" } ]
+         }
+      },
+      "SubnetPrivate2" : {
+         "Type" : "AWS::EC2::Subnet",
+         "Properties" : {
+            "VpcId" : { "Ref" : "AwsMeetupVpc" },
+            "CidrBlock" : "10.0.2.0/24",
+            "AvailabilityZone" : {"Ref" : "ParamAvailabilityZone2"},
+            "Tags" : [ { "Key" : "Name", "Value" : "aws meetup private subnet 2" } ]
+         }
+      },
+     "SubnetPublic1" : {
+         "Type" : "AWS::EC2::Subnet",
+         "Properties" : {
+            "VpcId" : { "Ref" : "AwsMeetupVpc" },
+            "CidrBlock" : "10.0.3.0/24",
+            "AvailabilityZone" : {"Ref" : "ParamAvailabilityZone1"},
+            "Tags" : [ { "Key" : "Name", "Value" : "aws meetup public subnet 1" } ]
+         }
+      },
+      "SubnetPublic2" : {
+         "Type" : "AWS::EC2::Subnet",
+         "Properties" : {
+            "VpcId" : { "Ref" : "AwsMeetupVpc" },
+            "CidrBlock" : "10.0.4.0/24",
+            "AvailabilityZone" : {"Ref" : "ParamAvailabilityZone2"},
+            "Tags" : [ { "Key" : "Name", "Value" : "aws meetup public subnet 2" } ]
+         }
+      },
+      "InstanceSecurityGroup" : {
+         "Type" : "AWS::EC2::SecurityGroup",
+         "Properties" : {
+            "GroupDescription" : "Allow ssh to client host",
+            "VpcId" : {"Ref" : "AwsMeetupVpc"},
+            "SecurityGroupIngress" : [{
+                  "IpProtocol" : "tcp",
+                  "FromPort" : "22",
+                  "ToPort" : "22",
+                  "SourceSecurityGroupId" : { "Ref" : "BastionSecurityGroup" }
+               }]
+         }
+       },
+       "BastionSecurityGroup" : {
+           "Type" : "AWS::EC2::SecurityGroup",
+           "Properties" : {
+            "GroupDescription" : "Allow SSH to instances in this security group",
+            "VpcId" : {"Ref" : "AwsMeetupVpc"},
+            "SecurityGroupIngress" : [{
+                  "IpProtocol" : "tcp",
+                  "FromPort" : "22",
+                  "ToPort" : "22",
+                  "CidrIp" : {"Ref" : "ParamSshCidr"}
+             }]
+           }
+      },
+
+      "InternetGateway" : {
+         "Type" : "AWS::EC2::InternetGateway",
+         "Properties" : {
+            "Tags" : [ {"Key" : "name", "Value" : "AWS Meetup Internet Gateway"}]
+         }
+      },
+
+      "AttachGateway" : {
+   		"Type" : "AWS::EC2::VPCGatewayAttachment",
+   		"Properties" : {
+      		"VpcId" : { "Ref" : "AwsMeetupVpc" },
+      		"InternetGatewayId" : { "Ref" : "InternetGateway" }
+	  }
+      },
+      "LaunchConfig" : {
+        "Type" : "AWS::AutoScaling::LaunchConfiguration",
+        "Properties" : {
+          "KeyName" : { "Ref" : "ParamKeyName" },
+          "ImageId" : "ami-e7527ed7",
+          "SecurityGroups" : [ { "Ref" : "InstanceSecurityGroup" } ],
+          "InstanceType" : "t2.micro",
+          "EbsOptimized" : "false",
+          "UserData" :  { "Fn::Base64": { "Fn::Join": [ "", [
+      "#!/bin/bash -e\n",
+      "yum install --downloadonly --downloaddir=. httpd "
+    ] ] } }
+
+
+        } 
+    },
+    "WebServerGroup" : {
+       "Type" : "AWS::AutoScaling::AutoScalingGroup",
+       "Properties" : {
+     		"AvailabilityZones" : [{"Ref" : "ParamAvailabilityZone1"}, {"Ref" : "ParamAvailabilityZone2"}],
+	        "VPCZoneIdentifier" : [{ "Ref" : "SubnetPrivate1" }, { "Ref" : "SubnetPrivate2" }],
+     		"LaunchConfigurationName" : { "Ref" : "LaunchConfig" },
+     		"MinSize" : "2",
+     		"MaxSize" : "2",
+     		"LoadBalancerNames" : [ { "Ref" : "ElasticLoadBalancer" } ],
+     		"MetricsCollection": [{
+           		"Granularity": "1Minute",
+           		"Metrics": [
+              			"GroupMinSize",
+              			"GroupMaxSize"
+           		]
+        	}]
+  	   }
+        },
+	"ElasticLoadBalancer" : {
+	 "Type" : "AWS::ElasticLoadBalancing::LoadBalancer",
+	 "Properties" : {
+	   "Subnets" : [{ "Ref" : "SubnetPublic1" }, { "Ref" : "SubnetPublic2" }],
+	   "Listeners": [{
+	     "LoadBalancerPort": "80",
+	     "InstancePort": "80",
+	     "Protocol": "HTTP"
+	   }],
+	   "HealthCheck": {
+	     "Target": "HTTP:80/",
+	     "HealthyThreshold": "3",
+	     "UnhealthyThreshold": "5",
+	     "Interval": "30",
+	     "Timeout": "5"
+	   },
+	   "ConnectionDrainingPolicy": {
+	     "Enabled" : "true",
+	     "Timeout" : "60"
+	   }
+	 }
+	},
+        "BastionInstance" : {
+         "Type" : "AWS::EC2::Instance",
+         "Properties" : {
+            "ImageId" : "ami-e7527ed7",
+            "KeyName" : { "Ref" : "ParamKeyName" },
+            "InstanceType" : "t2.micro",
+            "SecurityGroupIds" : [ { "Ref" : "BastionSecurityGroup" } ],
+            "SubnetId": {"Ref" : "SubnetPublic1"},
+            "Tags" : [ {"Key" : "name", "Value" : "Bastion Instance"}]
+         }
+      },
+      "BastionEIP" : {
+	   "Type" : "AWS::EC2::EIP",
+	   "Properties" : {
+	      "InstanceId" : {"Ref" : "BastionInstance"}
+	   }
+      },
+      "RouteTable" : {
+         "Type" : "AWS::EC2::RouteTable",
+         "Properties" : {
+            "VpcId" : { "Ref" : "AwsMeetupVpc" },
+            "Tags" : [ { "Key" : "name", "Value" : "aws meetup route table" } ]
+         }
+      },
+      "Route" : {
+         "Type" : "AWS::EC2::Route",
+         "DependsOn" : "InternetGateway",
+         "Properties" : {
+            "RouteTableId" : { "Ref" : "RouteTable" },
+            "DestinationCidrBlock" : "0.0.0.0/0",
+            "GatewayId" : { "Ref" : "InternetGateway" }
+         }
+      },
+      "RouteTableAssociation" : {
+         "Type" : "AWS::EC2::SubnetRouteTableAssociation",
+         "Properties" : {
+            "SubnetId" : { "Ref" : "SubnetPublic1" },
+            "RouteTableId" : { "Ref" : "RouteTable" }
+         }
+      },
+      "RouteTableAssociation" : {
+         "Type" : "AWS::EC2::SubnetRouteTableAssociation",
+         "Properties" : {
+            "SubnetId" : { "Ref" : "SubnetPublic2" },
+            "RouteTableId" : { "Ref" : "RouteTable" }
+         }
+      }
+           
+   },
+   "Outputs" : {
+  	"VPC" : {
+    	    "Description": "VPC",  
+ 	    "Value" : { "Ref" : "AwsMeetupVpc" }
+         },
+        "BastionInstance" : {
+             "Description": "Bastion Instance ID",  
+             "Value" : { "Ref" : "BastionInstance" }
+         },
+        "BastionEIP" : {
+             "Description": "Bastion EIP",  
+             "Value" : { "Ref" : "BastionEIP" }
+         },
+        "InternetGateway" : {
+             "Description": "Internet Gateway",  
+             "Value" : { "Ref" : "InternetGateway" }
+        }
+  }
+}
