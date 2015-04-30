@@ -122,8 +122,8 @@
           "InstanceType" : "t2.micro",
           "EbsOptimized" : "false",
           "UserData" :  { "Fn::Base64": { "Fn::Join": [ "", [
-      "#!/bin/bash -e\n",
-      "yum install --downloadonly --downloaddir=. httpd "
+             "#!/bin/bash -e\n",
+             "curl -L https://www.chef.io/chef/install.sh | sudo bash \n"
     ] ] } }
 
 
@@ -177,7 +177,7 @@
             "InstanceType" : "t2.micro",
             "SecurityGroupIds" : [ { "Ref" : "BastionSecurityGroup" } ],
             "SubnetId": {"Ref" : "SubnetPublic1"},
-            "Tags" : [ {"Key" : "name", "Value" : "Bastion Instance"}]
+            "Tags" : [ {"Key" : "Name", "Value" : "Bastion Instance"}]
          }
       },
       "BastionEIP" : {
@@ -190,7 +190,7 @@
          "Type" : "AWS::EC2::RouteTable",
          "Properties" : {
             "VpcId" : { "Ref" : "AwsMeetupVpc" },
-            "Tags" : [ { "Key" : "name", "Value" : "aws meetup route table" } ]
+            "Tags" : [ { "Key" : "Name", "Value" : "aws meetup route table" } ]
          }
       },
       "Route" : {
@@ -202,14 +202,14 @@
             "GatewayId" : { "Ref" : "InternetGateway" }
          }
       },
-      "RouteTableAssociation" : {
+      "RouteTableAssociation1" : {
          "Type" : "AWS::EC2::SubnetRouteTableAssociation",
          "Properties" : {
             "SubnetId" : { "Ref" : "SubnetPublic1" },
             "RouteTableId" : { "Ref" : "RouteTable" }
          }
       },
-      "RouteTableAssociation" : {
+      "RouteTableAssociation2" : {
          "Type" : "AWS::EC2::SubnetRouteTableAssociation",
          "Properties" : {
             "SubnetId" : { "Ref" : "SubnetPublic2" },
